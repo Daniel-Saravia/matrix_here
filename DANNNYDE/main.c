@@ -6,10 +6,8 @@
 #include <sys/mman.h>
 #include "address_map_arm.h"
 
-// Define constants
 #define DEBOUNCE_INTERVAL 200000 // microseconds
 
-// Define a union for easier GPIO register mapping
 typedef union {
     unsigned int value;
     struct {
@@ -22,54 +20,52 @@ typedef union {
         unsigned int gpiou : 11;
     } bits;
 } GpioRegister; 
+
 void* LW_virtual;
+int fd;  // Global variable for file descriptor to ensure it's accessible in all functions
+
+// Function prototypes
+int initialize_hardware(void);
+void perform_cleanup(void);
 
 int main() {
-    int fd; // File descriptor for hardware access
     if (initialize_hardware() == -1) {
         fprintf(stderr, "Failed to initialize hardware!\n");
         return -1;
     }
 
-    // Configure a specific port (JP1) for 7-segment display output
     volatile unsigned int* JP1_ptr = (volatile unsigned int*)(LW_virtual + JP1_BASE);
     *(JP1_ptr + 1) = 0x0000000F; // Set lower 4 bits for output
     *JP1_ptr = 0;  // Initialize the display to 0
 
-    // Set up switch pointer
     volatile signed int* SW_ptr = (volatile signed int*)(LW_virtual + SW_BASE);
     signed int previousSwitchState = *SW_ptr;
 
     printf("Flip switches to increment the display on the 7-segment decoder.\n");
 
-    // Main loop to check switch changes and update display
     while (1) {
         signed int currentSwitchState = *SW_ptr;
 
-        // Check if any switch is flipped
         if (currentSwitchState != previousSwitchState) {
-            // Increment display value for each switch flipped up
             unsigned int increment = 0;
-            for (int i = 0; i < 10; i++) {  // Assuming there are 10 switches
-                if (currentSwitchState & (1 << i)) { // Check each switch individually
+            for (int i = 0; i < 10; i++) {
+                if (currentSwitchState & (1 << i)) {
                     increment++;
                 }
             }
-            *JP1_ptr = (*JP1_ptr + increment) % 16;  // Increment and wrap around every 16
+            *JP1_ptr = (*JP1_ptr + increment) % 16; 
             printf("Displaying number %u on the 7-segment decoder circuits\n", *JP1_ptr);
-            usleep(DEBOUNCE_INTERVAL);  // Simple debouncing
+            usleep(DEBOUNCE_INTERVAL);  
 
             previousSwitchState = currentSwitchState;
         }
     }
 
-    // Clean up resources (this line will never be reached in this example)
     perform_cleanup();
     return 0;
 }
 
-int initialize_hardware() {
-    // Open and map physical memory
+int initialize_hardware(void) {
     fd = open("/dev/mem", (O_RDWR | O_SYNC));
     if (fd == -1) {
         perror("ERROR: could not open \"/dev/mem\"");
@@ -85,7 +81,7 @@ int initialize_hardware() {
     return 0;
 }
 
-void perform_cleanup() {
+void perform_cleanup(void) {
     if (LW_virtual) {
         munmap(LW_virtual, LW_BRIDGE_SPAN);
     }
