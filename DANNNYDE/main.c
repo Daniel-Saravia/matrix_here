@@ -21,17 +21,11 @@ typedef union {
         unsigned int gpio5 : 4;
         unsigned int gpiou : 11;
     } bits;
-} GpioRegister;
-
-// Function prototypes
-int initialize_hardware();
-void perform_cleanup();
-
-// Global variables for memory and hardware interaction
-int fd = -1;
+} GpioRegister; 
 void* LW_virtual;
 
 int main() {
+    int fd; // File descriptor for hardware access
     if (initialize_hardware() == -1) {
         fprintf(stderr, "Failed to initialize hardware!\n");
         return -1;
@@ -42,24 +36,30 @@ int main() {
     *(JP1_ptr + 1) = 0x0000000F; // Set lower 4 bits for output
     *JP1_ptr = 0;  // Initialize the display to 0
 
-    // Set up button pointer
-    volatile unsigned int* KEY_ptr = (volatile unsigned int*)(LW_virtual + KEY_BASE);
-    unsigned int previousButtonState = *KEY_ptr;
+    // Set up switch pointer
+    volatile signed int* SW_ptr = (volatile signed int*)(LW_virtual + SW_BASE);
+    signed int previousSwitchState = *SW_ptr;
 
-    printf("Press button to increment the display on the 7-segment decoder.\n");
+    printf("Flip switches to increment the display on the 7-segment decoder.\n");
 
-    // Main loop to check button presses and update display
+    // Main loop to check switch changes and update display
     while (1) {
-        unsigned int currentButtonState = *KEY_ptr;
+        signed int currentSwitchState = *SW_ptr;
 
-        // Check if any button is pressed (assuming a single button for simplicity)
-        if (currentButtonState != previousButtonState) {
-            if (currentButtonState == 1) {  // Assuming button press changes state to 1
-                *JP1_ptr = (*JP1_ptr + 1) % 16;  // Increment and wrap around every 16
-                printf("Displaying number %u on the 7-segment decoder circuits\n", *JP1_ptr);
-                usleep(DEBOUNCE_INTERVAL);  // Simple debouncing
+        // Check if any switch is flipped
+        if (currentSwitchState != previousSwitchState) {
+            // Increment display value for each switch flipped up
+            unsigned int increment = 0;
+            for (int i = 0; i < 10; i++) {  // Assuming there are 10 switches
+                if (currentSwitchState & (1 << i)) { // Check each switch individually
+                    increment++;
+                }
             }
-            previousButtonState = currentButtonState;
+            *JP1_ptr = (*JP1_ptr + increment) % 16;  // Increment and wrap around every 16
+            printf("Displaying number %u on the 7-segment decoder circuits\n", *JP1_ptr);
+            usleep(DEBOUNCE_INTERVAL);  // Simple debouncing
+
+            previousSwitchState = currentSwitchState;
         }
     }
 
