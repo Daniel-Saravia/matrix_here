@@ -64,7 +64,7 @@ int unmap_physical(void* virtual_base, unsigned int span) {
     return 0;
 }
 
-int main() {
+int hardware(){
     int fd = -1; // File descriptor for accessing /dev/mem
     void* LW_virtual; // Virtual base address after mapping
 
@@ -76,12 +76,21 @@ int main() {
         close_physical(fd);
         return -1;
     }
+    return 0;
+}
 
-    // Configure a specific port (JP1) for output
+
+
+int main() {
+    hardware();
+
+    //======== Configure a specific port (JP1) for output ========
     volatile unsigned int* JP1_ptr = (unsigned int*)(LW_virtual + JP1_BASE);
-    *(JP1_ptr + 1) = 0x0000000F; // Example: Setting lower 4 bits for output, adjust as needed
+    *(JP1_ptr + 1) = 0x0000000F;
+    //======== END Configure a specific port (JP1) for output ====
 
-    *JP1_ptr = 6; // Set the output to display the number "5". Adjust this operation as per your hardware's requirement.
+
+    *JP1_ptr = 6; // Set the output to display the number "6". Adjust this operation as per your hardware's requirement.
 
     printf("Displaying number 6 on the 7 Segment Decoder circuits\n");
 
