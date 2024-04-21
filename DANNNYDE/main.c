@@ -1,12 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
-#define _DEFAULT_SOURCE
 #include <unistd.h>
 #include <sys/mman.h>
 #include "address_map_arm.h"
 
-// Define a union for easier GPIO register mapping.
+// Define constants
+#define DEBOUNCE_INTERVAL 200000 // microseconds
+
+// Define a union for easier GPIO register mapping
 typedef union {
     unsigned int value;
     struct {
@@ -20,62 +22,13 @@ typedef union {
     } bits;
 } GpioRegister;
 
-// Global variables
-int fd = -1; // File descriptor for accessing /dev/mem
-void* LW_virtual; // Virtual base address after mapping
-
 // Function prototypes
-int open_physical(int fd);
-void close_physical(int fd);
-void* map_physical(int fd, unsigned int base, unsigned int span);
-int unmap_physical(void* virtual_base, unsigned int span);
 int initialize_hardware();
+void perform_cleanup();
 
-// Function implementations
-int open_physical(int fd) {
-    if (fd == -1) {
-        fd = open("/dev/mem", (O_RDWR | O_SYNC));
-        if (fd == -1) {
-            perror("ERROR: could not open \"/dev/mem\"");
-            return -1;
-        }
-    }
-    return fd;
-}
-
-void close_physical(int fd) {
-    close(fd);
-}
-
-void* map_physical(int fd, unsigned int base, unsigned int span) {
-    void *virtual_base = mmap(NULL, span, (PROT_READ | PROT_WRITE), MAP_SHARED, fd, base);
-    if (virtual_base == MAP_FAILED) {
-        perror("ERROR: mmap() failed");
-        close(fd);
-        return NULL;
-    }
-    return virtual_base;
-}
-
-int unmap_physical(void* virtual_base, unsigned int span) {
-    if (munmap(virtual_base, span) != 0) {
-        perror("ERROR: munmap() failed");
-        return -1;
-    }
-    return 0;
-}
-
-int initialize_hardware() {
-    // Attempt to open and map the necessary physical memory
-    if ((fd = open_physical(fd)) == -1) {
-        return -1;
-    }
-    if ((LW_virtual = map_physical(fd, LW_BRIDGE_BASE, LW_BRIDGE_SPAN)) == NULL) {
-        close_physical(fd);
-        return -1;
-    }
-    return 0;
-}
+// Global variables for memory and hardware interaction
+int fd = -1;
+void* LW_virtual;
 
 int main() {
     if (initialize_hardware() == -1) {
@@ -83,16 +36,59 @@ int main() {
         return -1;
     }
 
-    // Configure a specific port (JP1) for output
-    volatile unsigned int* JP1_ptr = (unsigned int*)(LW_virtual + JP1_BASE);
+    // Configure a specific port (JP1) for 7-segment display output
+    volatile unsigned int* JP1_ptr = (volatile unsigned int*)(LW_virtual + JP1_BASE);
     *(JP1_ptr + 1) = 0x0000000F; // Set lower 4 bits for output
+    *JP1_ptr = 0;  // Initialize the display to 0
 
-    *JP1_ptr = 7; // Set the output to display the number "6".
+    // Set up button pointer
+    volatile unsigned int* KEY_ptr = (volatile unsigned int*)(LW_virtual + KEY_BASE);
+    unsigned int previousButtonState = *KEY_ptr;
 
-    printf("Displaying number 7 on the 7 Segment Decoder circuits\n");
+    printf("Press button to increment the display on the 7-segment decoder.\n");
 
-    // Perform cleanup by unmapping memory and closing the file descriptor
-    unmap_physical(LW_virtual, LW_BRIDGE_SPAN);
-    close_physical(fd);
+    // Main loop to check button presses and update display
+    while (1) {
+        unsigned int currentButtonState = *KEY_ptr;
+
+        // Check if any button is pressed (assuming a single button for simplicity)
+        if (currentButtonState != previousButtonState) {
+            if (currentButtonState == 1) {  // Assuming button press changes state to 1
+                *JP1_ptr = (*JP1_ptr + 1) % 16;  // Increment and wrap around every 16
+                printf("Displaying number %u on the 7-segment decoder circuits\n", *JP1_ptr);
+                usleep(DEBOUNCE_INTERVAL);  // Simple debouncing
+            }
+            previousButtonState = currentButtonState;
+        }
+    }
+
+    // Clean up resources (this line will never be reached in this example)
+    perform_cleanup();
     return 0;
+}
+
+int initialize_hardware() {
+    // Open and map physical memory
+    fd = open("/dev/mem", (O_RDWR | O_SYNC));
+    if (fd == -1) {
+        perror("ERROR: could not open \"/dev/mem\"");
+        return -1;
+    }
+
+    LW_virtual = mmap(NULL, LW_BRIDGE_SPAN, (PROT_READ | PROT_WRITE), MAP_SHARED, fd, LW_BRIDGE_BASE);
+    if (LW_virtual == MAP_FAILED) {
+        perror("ERROR: mmap() failed");
+        close(fd);
+        return -1;
+    }
+    return 0;
+}
+
+void perform_cleanup() {
+    if (LW_virtual) {
+        munmap(LW_virtual, LW_BRIDGE_SPAN);
+    }
+    if (fd != -1) {
+        close(fd);
+    }
 }
