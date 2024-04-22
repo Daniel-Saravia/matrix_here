@@ -1,28 +1,8 @@
-#define _DEFAULT_SOURCE
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include "address_map_arm.h"
+// main.c
 
-// Define constants
-#define DEBOUNCE_INTERVAL 200000 // microseconds
+#include "main.h"
 
-// Define a union for easier GPIO register mapping
-typedef union {
-    unsigned int value;
-    struct {
-        unsigned int gpio0 : 4;
-        unsigned int gpio1 : 4;
-        unsigned int gpio2 : 4;
-        unsigned int gpio3 : 4;
-        unsigned int gpio4 : 4;
-        unsigned int gpio5 : 4;
-        unsigned int gpiou : 11;
-    } bits;
-} GpioRegister; 
-void* LW_virtual;
+void* LW_virtual;  // Shared memory base pointer
 
 int main() {
     int fd; // File descriptor for hardware access
