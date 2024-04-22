@@ -36,7 +36,7 @@ int main() {
         fprintf(stderr, "Failed to initialize hardware!\n");
         return -1;
     }
-
+    ////////////////// HARDWARE ///////////////////////////////////////////////////////
     // Configure a specific port (JP1) for 7-segment display output
     volatile unsigned int* JP1_ptr = (volatile unsigned int*)(LW_virtual + JP1_BASE);
     *(JP1_ptr + 1) = 0x0000000F; // Set lower 4 bits for output
@@ -49,28 +49,35 @@ int main() {
     // Set up switch pointer
     volatile signed int* SW_ptr = (volatile signed int*)(LW_virtual + SW_BASE);
     signed int previousSwitchState = *SW_ptr;
+    ////////////////// HARDWARE ///////////////////////////////////////////////////////
+
 
     printf("Flip switches to increment the display on the 7-segment decoder.\n");
 
-    // Main loop to check switch changes and update display
-    while (1) {
-        signed int currentSwitchState = *SW_ptr;
+    // // Main loop to check switch changes and update display
+    // while (1) {
+    //     signed int currentSwitchState = *SW_ptr;
 
-        // Check if any switch is flipped
-        if (currentSwitchState != previousSwitchState) {
-            unsigned int increment = 0;
-            for (int i = 0; i < 10; i++) {
-                if (currentSwitchState & (1 << i)) {
-                    increment++;
-                }
-            }
-            *JP1_ptr = (*JP1_ptr + increment) % 16;  // Increment and wrap around every 16
-            printf("Displaying number %u on the 7-segment decoder circuits\n", *JP1_ptr);
-            usleep(DEBOUNCE_INTERVAL);  // Simple debouncing
+    //     // Check if any switch is flipped
+    //     if (currentSwitchState != previousSwitchState) {
+    //         unsigned int increment = 0;
+    //         for (int i = 0; i < 10; i++) {
+    //             if (currentSwitchState & (1 << i)) {
+    //                 increment++;
+    //             }
+    //         }
+    //         *JP1_ptr = (*JP1_ptr + increment) % 16;  // Increment and wrap around every 16
+    //         printf("Displaying number %u on the 7-segment decoder circuits\n", *JP1_ptr);
+    //         usleep(DEBOUNCE_INTERVAL);  // Simple debouncing
 
-            previousSwitchState = currentSwitchState;
-        }
-    }
+    //         previousSwitchState = currentSwitchState;
+    //     }
+    // }
+    GpioRegister reg;
+    reg.value = 0xFFFFFFFF; // Set all bits to 1
+    reg.bits.gpio0 = 0x5;   // Set GPIO0 to binary 0101
+
+
 
     // Should never reach this point but here for completeness
     perform_cleanup();
