@@ -14,10 +14,9 @@
 #define DEBOUNCE_INTERVAL 500000 // microseconds
 
 #define BUTTON_EXIT 1       // Used to exit the program or a loop
-#define BUTTON_ADD_NUMBER 2     // Triggers a specific action, like starting an operation
+#define BUTTON_ADD_NUMBER 2 // Triggers a specific action, like starting an operation
 #define BUTTON_OTHER1 3     // Reserved for future use or another specific function
 #define BUTTON_OTHER2 4     // Reserved for future use or another specific function
-
 
 // Global varibles
 int fd;
@@ -30,12 +29,13 @@ int openMemoryDevice();
 void *mapMemory(int fd);
 void initializeLCDCanvas(LCD_CANVAS *canvas, void *virtual_base);
 void drawGrid(LCD_CANVAS *canvas);
-void printNumbers(LCD_CANVAS *canvas);
+void print_matrix_multiplication(LCD_CANVAS *canvas, int *result);
 void cleanup(void *virtual_base, int fd, LCD_CANVAS *canvas);
 void clearNumbers(LCD_CANVAS *canvas);
 void displayGridOnLCD(LCD_CANVAS *canvas);
-void handleInput();
-void printNumbers_users(LCD_CANVAS *canvas, int switches_input, int table_index);
+void matrix_multiplication(int *result, int *matrixA, int *matrixB);
+void storeMatrixValues(int switches_input, int table_index, int *matrixA, int *matrixB);
+void printNumberOnLCD(LCD_CANVAS *canvas, int switches_input, int table_index);
 
 // Union representing the switches
 typedef union
@@ -55,6 +55,11 @@ typedef union
 int main()
 {
     LCD_CANVAS LcdCanvas;
+
+    // matrix_multiplication varibles
+    int matrixA[4]; // Entries for the first matrix
+    int matrixB[4]; // Entries for the second matrix
+    int result[4];
 
     // Initialize hardware
     if (initialize_hardware() == -1)
@@ -115,11 +120,18 @@ int main()
         if (currentButtonState == BUTTON_ADD_NUMBER)
         {
             if (table_index < 8)
-            { // Check to ensure we do not exceed grid limits
-                printNumbers_users(&LcdCanvas, (int)(currentSwitchState), table_index);
+            {
+                storeMatrixValues((int)(currentSwitchState), table_index, matrixA, matrixB);
+                printNumberOnLCD(&LcdCanvas, (int)(currentSwitchState), table_index);
                 table_index++;
+                usleep(DEBOUNCE_INTERVAL); // Sleep to debounce
             }
-            usleep(DEBOUNCE_INTERVAL); // Sleep to debounce
+            else
+            {
+                // Handle matrix multiplication
+                matrix_multiplication(result, matrixA, matrixB);
+                print_matrix_multiplication(&LcdCanvas, result);
+            }
         }
     }
 
@@ -203,66 +215,99 @@ void drawGrid(LCD_CANVAS *canvas)
     }
 }
 
-// Prints the number "12" in each cell of a 4x2 grid
-void printNumbers(LCD_CANVAS *canvas)
+void matrix_multiplication(int *result, int *matrixA, int *matrixB)
 {
-    int row, col;
-    int cellWidth = canvas->Width / 4;   // 4 columns
-    int cellHeight = canvas->Height / 2; // 2 rows
-
-    for (row = 0; row < 2; row++)
-    { // 2 rows
-        for (col = 0; col < 4; col++)
-        { // 4 columns
-
-            int x = col * cellWidth + (cellWidth - 16) / 2;   // Center "123" in the cell
-            int y = row * cellHeight + (cellHeight - 16) / 2; // Center "123" in the cell
-
-            DRAW_PrintString(canvas, x, y, "12", LCD_BLACK, &font_16x16);
-        }
-    }
-
-    DRAW_Refresh(canvas); // Refresh the canvas to update the display
+    result[0] = matrixA[0] * matrixB[0] + matrixA[1] * matrixB[2];
+    result[1] = matrixA[0] * matrixB[1] + matrixA[1] * matrixB[3];
+    result[2] = matrixA[2] * matrixB[0] + matrixA[3] * matrixB[2];
+    result[3] = matrixA[2] * matrixB[1] + matrixA[3] * matrixB[3];
 }
 
-// Prints user input numbers in each cell of a 4x2 grid
-void printNumbers_users(LCD_CANVAS *canvas, int switches_input, int table_index) {
+// Function to display the result of a 2x2 matrix multiplication on the LCD
+void print_matrix_multiplication(LCD_CANVAS *canvas, int *result)
+{
+    // Assuming the result matrix is displayed on the entire 4x2 grid
+    // Customize the grid position for the result matrix here
+    int result_positions[4] = {0, 1, 4, 5}; // Top two cells and bottom two cells of the left half
+
+    // Clear previous numbers
+    clearNumbers(canvas); // Clears the entire screen and optionally redraws the grid
+
+    // Loop to print each element of the result matrix
+    int i;
+    for (i = 0; i < 4; i++)
+    {
+        int row = result_positions[i] / 4; // Calculating row index
+        int col = result_positions[i] % 4; // Calculating column index
+
+        // Calculate position within the cell to center the text
+        int cellWidth = canvas->Width / 4;
+        int cellHeight = canvas->Height / 2;
+        int x = col * cellWidth + (cellWidth - 16) / 2;   // Center text horizontally
+        int y = row * cellHeight + (cellHeight - 16) / 2; // Center text vertically
+
+        // Prepare text to be displayed
+        char text[10];                  // Ensure the buffer is large enough
+        sprintf(text, "%d", result[i]); // Convert integer to string
+
+        // Print each element of the matrix at the calculated position
+        DRAW_PrintString(canvas, x, y, text, LCD_BLACK, &font_16x16);
+    }
+
+    // Refresh the display to show the updated matrix
+    DRAW_Refresh(canvas);
+}
+
+void storeMatrixValues(int switches_input, int table_index, int *matrixA, int *matrixB)
+{
     // Custom mapping array to order indices as per your specification
     int custom_order[] = {0, 1, 4, 5, 2, 3, 6, 7};
 
-    // Check if the table_index is valid
-    if (table_index < 0 || table_index >= 8) {
+    // Ensure the table_index is within valid range
+    if (table_index < 0 || table_index >= 8)
+    {
         fprintf(stderr, "Error: Invalid table index %d. Must be between 0 and 7.\n", table_index);
         return;
     }
 
-    // Map the table_index to our custom grid order
+    // Determine the correct position in the matrix arrays based on the custom mapping
     int mapped_index = custom_order[table_index];
 
-    // Convert linear index to 2D grid positions
-    int row = mapped_index / 4;  // 4 columns in total
-    int col = mapped_index % 4;  // 2 rows in total
+    // Store the input in the appropriate matrix array
+    if (mapped_index < 4)
+    {
+        matrixA[mapped_index] = switches_input; // Store in matrixA for indices 0-3
+    }
+    else
+    {
+        matrixB[mapped_index - 4] = switches_input; // Store in matrixB for indices 4-7, adjusting index by subtracting 4
+    }
+}
 
-    // Calculate cell dimensions
+void printNumberOnLCD(LCD_CANVAS *canvas, int switches_input, int table_index)
+{
+    int custom_order[] = {0, 1, 4, 5, 2, 3, 6, 7};
+    if (table_index < 0 || table_index >= 8)
+    {
+        return; // Exit if the index is out of range
+    }
+
+    int mapped_index = custom_order[table_index];
+    int row = mapped_index / 4; // There are 4 columns in total
+    int col = mapped_index % 4; // There are 2 rows in total
+
     int cellWidth = canvas->Width / 4;
     int cellHeight = canvas->Height / 2;
 
-    // Calculate text position within the cell
     int x = col * cellWidth + (cellWidth - 16) / 2;
     int y = row * cellHeight + (cellHeight - 16) / 2;
 
-    // Convert switches_input to string
     char text[10];
     sprintf(text, "%d", switches_input);
 
-    // Draw the text in the corresponding cell
     DRAW_PrintString(canvas, x, y, text, LCD_BLACK, &font_16x16);
-
-    // Refresh the display to show changes
     DRAW_Refresh(canvas);
 }
-
-
 
 void clearNumbers(LCD_CANVAS *canvas)
 {
