@@ -11,88 +11,87 @@
 
 // Global variables
 int fd; // File descriptor for hardware access
-void* LW_virtual;
+void *LW_virtual;
 
 // Function prototypes
 int initialize_hardware(void);
 void perform_cleanup(void);
 
-// Define a union for easier GPIO register mapping
-typedef union {
+// Union representing the switches
+typedef union
+{
     unsigned int value;
-    struct {
-        unsigned int gpio0 : 4;
-        unsigned int gpio1 : 4;
-        unsigned int gpio2 : 4;
-        unsigned int gpio3 : 4;
-        unsigned int gpio4 : 4;
-        unsigned int gpio5 : 4;
-        unsigned int gpiou : 11;
+    struct
+    {
+        unsigned int sw0 : 1; // LSB-switch on the left
+        unsigned int sw1 : 1;
+        unsigned int sw2 : 1;
+        unsigned int sw3 : 1;
+        unsigned int unused : 6; // Adjusts for unused switches, assumes total 10 switches
     } bits;
-} GpioRegister; 
+} Switches;
 
-int main() {
-    if (initialize_hardware() == -1) {
+int main()
+{
+    // Initialize hardware
+    if (initialize_hardware() == -1)
+    {
         fprintf(stderr, "Failed to initialize hardware!\n");
         return -1;
     }
-    ////////////////// HARDWARE ///////////////////////////////////////////////////////
-    // Configure a specific port (JP1) for 7-segment display output
-    volatile unsigned int* JP1_ptr = (volatile unsigned int*)(LW_virtual + JP1_BASE);
+
+    // Configure JP1 for 7-segment display output
+    volatile unsigned int *JP1_ptr = (volatile unsigned int *)(LW_virtual + JP1_BASE);
+
     *(JP1_ptr + 1) = 0x0000000F; // Set lower 4 bits for output
-    *JP1_ptr = 0;  // Initialize the display to 0
+    *JP1_ptr = 0;                // Reset display register to known state (0)
 
     // Set up button pointer
-    volatile unsigned int* KEY_ptr = (volatile unsigned int*)(LW_virtual + KEY_BASE);
+    volatile unsigned int *KEY_ptr = (volatile unsigned int *)(LW_virtual + KEY_BASE);
     unsigned int previousButtonState = *KEY_ptr;
 
     // Set up switch pointer
-    volatile signed int* SW_ptr = (volatile signed int*)(LW_virtual + SW_BASE);
-    signed int previousSwitchState = *SW_ptr;
-    ////////////////// HARDWARE ///////////////////////////////////////////////////////
+    volatile unsigned int *SW_ptr = (volatile unsigned int *)(LW_virtual + SW_BASE);
+    unsigned int previousSwitchState = *SW_ptr; // Store initial switch state
 
+    printf("Use switches SW0 to SW3 to input a binary number and display its decimal equivalent on the 7-segment display.\n");
 
-    printf("Flip switches to increment the display on the 7-segment decoder.\n");
+    // Main loop to check switch changes and update display
 
-    // // Main loop to check switch changes and update display
-    // while (1) {
-    //     signed int currentSwitchState = *SW_ptr;
+    // init button state to 0 so 1 can be used to end program(key 0)
+    unsigned int currentButtonState = 0;
 
-    //     // Check if any switch is flipped
-    //     if (currentSwitchState != previousSwitchState) {
-    //         unsigned int increment = 0;
-    //         for (int i = 0; i < 10; i++) {
-    //             if (currentSwitchState & (1 << i)) {
-    //                 increment++;
-    //             }
-    //         }
-    //         *JP1_ptr = (*JP1_ptr + increment) % 16;  // Increment and wrap around every 16
-    //         printf("Displaying number %u on the 7-segment decoder circuits\n", *JP1_ptr);
-    //         usleep(DEBOUNCE_INTERVAL);  // Simple debouncing
+    while (currentButtonState != 1) // (key 0)
+    {
+        unsigned int currentSwitchState = *SW_ptr & 0x0F; // Mask to ensure only the first four switches are read
+        if (currentSwitchState != previousSwitchState)
+        {
+            *JP1_ptr = currentSwitchState; // Set the new state directly to the display
+            // add display to SCREEN here
+            printf("Displaying number: %u\n", (int)(*JP1_ptr - 4294967280));
+            usleep(DEBOUNCE_INTERVAL);                // Debounce delay to prevent rapid state changes
+            previousSwitchState = currentSwitchState; // Update previous state for comparison
+        }
+        currentButtonState = *KEY_ptr;
+    }
 
-    //         previousSwitchState = currentSwitchState;
-    //     }
-    // }
-    GpioRegister reg;
-    reg.value = 0xFFFFFFFF; // Set all bits to 1
-    reg.bits.gpio0 = 0x5;   // Set GPIO0 to binary 0101
-
-
-
-    // Should never reach this point but here for completeness
+    // Cleanup resources
     perform_cleanup();
     return 0;
 }
 
-int initialize_hardware() {
+int initialize_hardware()
+{
     fd = open("/dev/mem", (O_RDWR | O_SYNC));
-    if (fd == -1) {
+    if (fd == -1)
+    {
         perror("ERROR: could not open \"/dev/mem\"");
         return -1;
     }
 
     LW_virtual = mmap(NULL, LW_BRIDGE_SPAN, (PROT_READ | PROT_WRITE), MAP_SHARED, fd, LW_BRIDGE_BASE);
-    if (LW_virtual == MAP_FAILED) {
+    if (LW_virtual == MAP_FAILED)
+    {
         perror("ERROR: mmap() failed");
         close(fd);
         return -1;
@@ -100,11 +99,14 @@ int initialize_hardware() {
     return 0;
 }
 
-void perform_cleanup() {
-    if (LW_virtual) {
+void perform_cleanup()
+{
+    if (LW_virtual)
+    {
         munmap(LW_virtual, LW_BRIDGE_SPAN);
     }
-    if (fd != -1) {
+    if (fd != -1)
+    {
         close(fd);
     }
 }
