@@ -1,5 +1,5 @@
 #
-TARGET = LCD_parts
+TARGET = mix_mat
 SRC_DIR = src
 ALT_DEVICE_FAMILY ?= soc_cv_av
 SOCEDS_ROOT ?= $(SOCEDS_DEST_ROOT)

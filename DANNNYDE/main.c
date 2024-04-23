@@ -56,8 +56,6 @@ int main()
 
     printf("Use switches SW0 to SW3 to input a binary number and display its decimal equivalent on the 7-segment display.\n");
 
-    // Main loop to check switch changes and update display
-
     // init button state to 0 so 1 can be used to end program(key 0)
     unsigned int currentButtonState = 0;
 
