@@ -143,58 +143,89 @@ int main()
     return 0;
 }
 
+// Initializes hardware for the application by mapping necessary memory regions
 int initialize_hardware()
 {
+    // Attempt to open the memory device file that represents the physical memory of the system
     fd = open("/dev/mem", (O_RDWR | O_SYNC));
     if (fd == -1)
     {
+        // Print an error message if the memory device cannot be opened
         perror("ERROR: could not open \"/dev/mem\"");
-        return -1;
+        return -1;  // Return -1 to indicate failure
     }
 
+    // Map the physical address space for the Lightweight (LW) HPS-to-FPGA bridge into the process's virtual address space
     LW_virtual = mmap(NULL, LW_BRIDGE_SPAN, (PROT_READ | PROT_WRITE), MAP_SHARED, fd, LW_BRIDGE_BASE);
     if (LW_virtual == MAP_FAILED)
     {
+        // Print an error message if memory mapping fails
         perror("ERROR: mmap() failed");
-        close(fd);
-        return -1;
+        close(fd);  // Close the file descriptor as cleanup
+        return -1;  // Return -1 to indicate failure
     }
-    return 0;
+    return 0; // Return 0 to indicate success
 }
 
 // Maps memory for hardware registers and returns the virtual base address
 void *mapMemory(int fd)
 {
+    // Map a specific memory region specified by HW_REGS_BASE and HW_REGS_SPAN
     void *virtual_base = mmap(NULL, HW_REGS_SPAN, (PROT_READ | PROT_WRITE), MAP_SHARED, fd, HW_REGS_BASE);
     if (virtual_base == MAP_FAILED)
     {
+        // Print an error message if mapping fails
         printf("ERROR: mmap() failed...\n");
-        close(fd);
+        close(fd);  // Close the file descriptor as part of error handling
+        return NULL;  // Return NULL to indicate failure
     }
-    return virtual_base;
+    return virtual_base;  // Return the address of the mapped memory
 }
+
 
 // Initializes the LCD canvas with specified parameters
 void initializeLCDCanvas(LCD_CANVAS *canvas, void *virtual_base)
 {
+    // Display an initial message on console for debug or status update
     printf("Graphic LCD Demo\r\n");
+
+    // Set the width of the LCD display from a predefined constant
     canvas->Width = LCD_WIDTH;
+
+    // Set the height of the LCD display from a predefined constant
     canvas->Height = LCD_HEIGHT;
+
+    // Set the number of bits per pixel, here 1 bit per pixel typically for monochrome
     canvas->BitPerPixel = 1;
-    canvas->FrameSize = canvas->Width * canvas->Height / 8;
+
+    // Calculate the frame size in bytes required for the entire display
+    canvas->FrameSize = canvas->Width * canvas->Height / 8; // Dividing by 8 as each pixel is 1 bit
+
+    // Dynamically allocate memory for the frame buffer that holds the display content
     canvas->pFrame = (void *)malloc(canvas->FrameSize);
+
+    // Check if the memory allocation was successful
     if (canvas->pFrame == NULL)
     {
+        // If memory allocation failed, print an error message
         printf("failed to allocate lcd frame buffer\r\n");
     }
     else
     {
-        LCDHW_Init(virtual_base);
+        // If memory allocation was successful, initialize the LCD hardware
+        LCDHW_Init(virtual_base); // Initialize the LCD hardware with the base address of the mapped peripheral
+
+        // Turn on the backlight of the LCD
         LCDHW_BackLight(true);
+
+        // Initialize the LCD display to be ready for use
         LCD_Init();
+
+        // Clear the display, setting it to a white screen
         DRAW_Clear(canvas, LCD_WHITE);
     }
 }
+
 
 // Draws a 4x2 grid on the LCD screen
 void drawGrid(LCD_CANVAS *canvas)
@@ -215,13 +246,26 @@ void drawGrid(LCD_CANVAS *canvas)
     }
 }
 
+// Function to perform matrix multiplication for two 2x2 matrices and store the result in a provided array.
 void matrix_multiplication(int *result, int *matrixA, int *matrixB)
 {
-    result[0] = matrixA[0] * matrixB[0] + matrixA[1] * matrixB[2];
-    result[1] = matrixA[0] * matrixB[1] + matrixA[1] * matrixB[3];
-    result[2] = matrixA[2] * matrixB[0] + matrixA[3] * matrixB[2];
-    result[3] = matrixA[2] * matrixB[1] + matrixA[3] * matrixB[3];
+    // Compute the element at the first row, first column of the result matrix.
+    result[0] = matrixA[0] * matrixB[0] + matrixA[1] * matrixB[2]; // A[1,1] * B[1,1] + A[1,2] * B[2,1]
+
+    // Compute the element at the first row, second column of the result matrix.
+    result[1] = matrixA[0] * matrixB[1] + matrixA[1] * matrixB[3]; // A[1,1] * B[1,2] + A[1,2] * B[2,2]
+
+    // Compute the element at the second row, first column of the result matrix.
+    result[2] = matrixA[2] * matrixB[0] + matrixA[3] * matrixB[2]; // A[2,1] * B[1,1] + A[2,2] * B[2,1]
+
+    // Compute the element at the second row, second column of the result matrix.
+    result[3] = matrixA[2] * matrixB[1] + matrixA[3] * matrixB[3]; // A[2,1] * B[1,2] + A[2,2] * B[2,2]
+
+    // The resulting 2x2 matrix is stored in 'result' in row-major order:
+    // [ result[0] result[1] ]
+    // [ result[2] result[3] ]
 }
+
 
 // Function to display the result of a 2x2 matrix multiplication on the LCD
 void print_matrix_multiplication(LCD_CANVAS *canvas, int *result)
@@ -284,30 +328,44 @@ void storeMatrixValues(int switches_input, int table_index, int *matrixA, int *m
     }
 }
 
+// Function to display a number on the LCD based on the user's switch input and a specified order.
 void printNumberOnLCD(LCD_CANVAS *canvas, int switches_input, int table_index)
 {
+    // Define the custom order of indices for displaying numbers in a non-linear matrix format.
     int custom_order[] = {0, 1, 4, 5, 2, 3, 6, 7};
+
+    // Validate that the table_index is within the valid range to prevent accessing out-of-bounds array elements.
     if (table_index < 0 || table_index >= 8)
     {
-        return; // Exit if the index is out of range
+        return; // Exit the function if the index is out of range to avoid errors.
     }
 
+    // Map the user-defined index to the custom index arrangement for displaying numbers.
     int mapped_index = custom_order[table_index];
-    int row = mapped_index / 4; // There are 4 columns in total
-    int col = mapped_index % 4; // There are 2 rows in total
 
-    int cellWidth = canvas->Width / 4;
-    int cellHeight = canvas->Height / 2;
+    // Determine the row and column based on the mapped index for a 4-column layout.
+    int row = mapped_index / 4; // Calculate row from the mapped index (4 columns total).
+    int col = mapped_index % 4; // Calculate column from the mapped index (2 rows total).
 
-    int x = col * cellWidth + (cellWidth - 16) / 2;
-    int y = row * cellHeight + (cellHeight - 16) / 2;
+    // Calculate the width and height for each cell of the display grid.
+    int cellWidth = canvas->Width / 4;  // Divide canvas width by the number of columns.
+    int cellHeight = canvas->Height / 2; // Divide canvas height by the number of rows.
 
+    // Calculate the coordinates to center the text within each grid cell.
+    int x = col * cellWidth + (cellWidth - 16) / 2; // Horizontal position centered within the cell.
+    int y = row * cellHeight + (cellHeight - 16) / 2; // Vertical position centered within the cell.
+
+    // Format the switch input as a string to be displayed.
     char text[10];
-    sprintf(text, "%d", switches_input);
+    sprintf(text, "%d", switches_input); // Convert integer to string for display.
 
+    // Call the graphics library function to draw the string on the canvas at the calculated position.
     DRAW_PrintString(canvas, x, y, text, LCD_BLACK, &font_16x16);
+
+    // Refresh the canvas to update the display with the new data.
     DRAW_Refresh(canvas);
 }
+
 
 void clearNumbers(LCD_CANVAS *canvas)
 {
@@ -338,14 +396,19 @@ void cleanup(void *virtual_base, int fd, LCD_CANVAS *canvas)
     }
 }
 
+// Function to clean up resources to prevent resource leaks.
 void perform_cleanup()
 {
+    // Check if the virtual memory was mapped
     if (LW_virtual)
     {
+        // Unmap the memory mapping to free the virtual memory space
         munmap(LW_virtual, LW_BRIDGE_SPAN);
     }
+    // Check if the file descriptor is valid
     if (fd != -1)
     {
+        // Close the file descriptor to free up system resources
         close(fd);
     }
 }
