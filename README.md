@@ -1,7 +1,5 @@
 # Matrix Multiplier System README
 ![board](https://github.com/Daniel-Saravia/matrix_here/assets/108732138/3787b175-1e4b-4082-8d42-3e83c0cc5607)
-🎥 **Demo Video:**  
-[Watch the Matrix Multiplier System in action](https://youtube.com/shorts/fbNPpvxMlnQ?si=VlgJTO8n-lqysAde)
 
 ## Overview
 This project is designed to demonstrate matrix multiplication using the DE10-Standard FPGA board. It utilizes a combination of hardware and software components to input and display two 2x2 matrices, perform multiplication, and display the resulting matrix. This system is especially suitable for educational purposes where understanding matrix operations is desired.
